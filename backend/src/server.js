@@ -11,6 +11,7 @@ import path from 'path';
 dotenv.config();
 
 const __dirname = path.resolve();
+CONST PORT = process.env.PORT || 5000;
 
 
 app.use(cors({
@@ -31,6 +32,6 @@ if (process.env.NODE_ENV === 'production') {
     });
 }
 connectDB();
-server.listen(5000,(req,res)=>{
+server.listen(PORT,(req,res)=>{
     console.log("server is running at port 5000");
 })
