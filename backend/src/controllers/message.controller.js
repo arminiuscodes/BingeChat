@@ -27,7 +27,6 @@ export const getFriends = async (req, res) => {
         res.status(500).json({success: false, message: "server error!"});
     }
 };
-
 export const searchUsers = async (req, res) => {
     try {
         const { query } = req.query;
@@ -47,22 +46,30 @@ export const searchUsers = async (req, res) => {
                     ]
                 }
             ]
-        }).select('-password').limit(10);
+        }).select('-password').limit(10).lean(); // Add .lean() for better performance
 
-        res.status(200).json(users);
+        // Ensure all required fields are present
+        const completeUsers = users.map(user => ({
+            _id: user._id,
+            fullName: user.fullName || '',
+            username: user.username || '',
+            profilePic: user.profilePic || '/avatar.png'
+        }));
+
+        res.status(200).json(completeUsers);
     } catch (error) {
         console.error("Error in searchUsers", error.message);
         res.status(500).json({success: false, message: "server error!"});
     }
 };
-
 export const getReceivedFriendRequests = async (req, res) => {
     try {
         const userId = req.user._id;
         const requests = await FriendRequest.find({
             receiver: userId,
             status: 'pending'
-        }).populate('sender', '-password');
+        })
+        .populate('sender', '-password');
         
         res.status(200).json(requests);
     } catch (error) {
@@ -72,18 +79,25 @@ export const getReceivedFriendRequests = async (req, res) => {
 };
 
 export const getSentFriendRequests = async (req, res) => {
-    try {
-        const userId = req.user._id;
-        const requests = await FriendRequest.find({
-            sender: userId,
-            status: 'pending'
-        }).populate('receiver', '-password');
-        
-        res.status(200).json(requests);
-    } catch (error) {
-        console.error("Error in getSentFriendRequests", error.message);
-        res.status(500).json({success: false, message: "server error!"});
-    }
+  try {
+    const userId = req.user._id;
+    const requests = await FriendRequest.find({
+      sender: userId,
+      status: 'pending'
+    }).populate({
+      path: 'receiver',
+      select: '-password',
+      match: { _id: { $exists: true } } // Ensure receiver exists
+    });
+
+    // Filter out requests where receiver is null (e.g., deleted users)
+    const validRequests = requests.filter(request => request.receiver !== null);
+    
+    res.status(200).json(validRequests);
+  } catch (error) {
+    console.error("Error in getSentFriendRequests", error.message);
+    res.status(500).json({ success: false, message: "server error!" });
+  }
 };
 
 export const sendFriendRequest = async (req, res) => {

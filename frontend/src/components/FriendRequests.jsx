@@ -46,8 +46,10 @@ const FriendRequests = ({ isOpen, onClose }) => {
   };
 
   const getRequestStatus = (userId) => {
-    const isSent = sentRequests.some(req => req.recipient._id === userId);
-    const isReceived = friendRequests.some(req => req.sender._id === userId);
+    if (!userId) return null;
+    // Ensure string comparison to handle ObjectId vs string in production
+    const isSent = sentRequests.some(req => req.receiver?._id?.toString() === userId.toString());
+    const isReceived = friendRequests.some(req => req.sender?._id?.toString() === userId.toString());
     if (isSent) return 'sent';
     if (isReceived) return 'received';
     return null;
@@ -55,11 +57,12 @@ const FriendRequests = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
+  // Debug log to check state in production
+  console.log('FriendRequests state:', { friendRequests, sentRequests, searchResults });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3">
       <div className="relative bg-base-100 rounded-xl sm:rounded-3xl shadow-2xl border border-base-300/30 overflow-hidden w-full max-w-xl h-[95vh] sm:h-[90vh] flex flex-col">
-        
-        {/* Header */}
         <div className="flex justify-between items-center p-4 border-b border-base-300/30">
           <h2 className="text-xl font-bold text-transparent bg-gradient-to-r from-primary to-secondary bg-clip-text">
             Friend Requests
@@ -76,8 +79,6 @@ const FriendRequests = ({ isOpen, onClose }) => {
             <X size={20} />
           </button>
         </div>
-
-        {/* Tabs */}
         <div className="flex justify-around border-b border-base-300/30 text-sm font-medium">
           {['received', 'sent', 'search'].map(tab => (
             <button
@@ -93,11 +94,7 @@ const FriendRequests = ({ isOpen, onClose }) => {
             </button>
           ))}
         </div>
-
-        {/* Body */}
         <div className="flex-1 overflow-y-auto sm:p-5 p-3 space-y-4">
-
-          {/* Search Users */}
           {activeTab === 'search' && (
             <>
               <div className="relative mb-4">
@@ -110,42 +107,37 @@ const FriendRequests = ({ isOpen, onClose }) => {
                   onChange={handleSearch}
                 />
               </div>
-
               {isSearching && (
                 <div className="text-center py-6">
                   <span className="loading loading-spinner loading-lg text-primary"></span>
                 </div>
               )}
-
               {!isSearching && searchQuery.length > 0 && searchResults.length === 0 && (
                 <div className="text-center py-10 text-base-content/60">
                   <UserX className="w-10 h-10 mx-auto mb-4" />
                   <p>No users found matching "{searchQuery}"</p>
                 </div>
               )}
-
               {!isSearching && searchResults.length > 0 && (
                 <div className="space-y-3">
                   {searchResults.map((user) => {
+                    if (!user?._id) return null;
                     const status = getRequestStatus(user._id);
-                    const isOwnProfile = authUser && user._id === authUser._id;
+                    const isOwnProfile = authUser && user._id.toString() === authUser._id.toString();
                     if (isOwnProfile) return null;
-
                     return (
                       <div key={user._id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 bg-base-200 rounded-lg border">
                         <div className="flex items-center gap-3 flex-1">
                           <div className="avatar">
                             <div className="w-10 h-10 rounded-full">
-                              <img src={user.profilePic || "/avatar.png"} alt={user.fullName} />
+                              <img src={user.profilePic || "/avatar.png"} alt={user.fullName || 'User'} />
                             </div>
                           </div>
                           <div>
-                            <h3 className="font-semibold">{user.fullName}</h3>
-                            <p className="text-sm text-base-content/60">@{user.username}</p>
+                            <h3 className="font-semibold">{user.fullName || 'Unknown User'}</h3>
+                            <p className="text-sm text-base-content/60">@{user.username || 'unknown'}</p>
                           </div>
                         </div>
-
-                        {/* Status Actions */}
                         {!status && (
                           <button
                             onClick={() => sendFriendRequest(user._id)}
@@ -161,18 +153,16 @@ const FriendRequests = ({ isOpen, onClose }) => {
                             )}
                           </button>
                         )}
-
                         {status === 'sent' && (
                           <button disabled className="btn btn-ghost btn-sm text-warning w-full sm:w-auto">
                             <Clock size={16} /> Sent
                           </button>
                         )}
-
                         {status === 'received' && (
                           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                             <button
                               onClick={() => {
-                                const matched = friendRequests.find(r => r.sender._id === user._id);
+                                const matched = friendRequests.find(r => r.sender?._id?.toString() === user._id.toString());
                                 if (matched) acceptFriendRequest(matched._id);
                               }}
                               disabled={isManagingRequest}
@@ -182,7 +172,7 @@ const FriendRequests = ({ isOpen, onClose }) => {
                             </button>
                             <button
                               onClick={() => {
-                                const matched = friendRequests.find(r => r.sender._id === user._id);
+                                const matched = friendRequests.find(r => r.sender?._id?.toString() === user._id.toString());
                                 if (matched) declineFriendRequest(matched._id);
                               }}
                               disabled={isManagingRequest}
@@ -199,20 +189,18 @@ const FriendRequests = ({ isOpen, onClose }) => {
               )}
             </>
           )}
-
-          {/* Received Requests */}
           {activeTab === 'received' && (
-            friendRequests.length > 0 ? (
+            friendRequests.length > 0 && friendRequests.every(req => req.sender) ? (
               friendRequests.map(request => (
                 <div key={request._id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-3 bg-base-200 rounded-lg border">
                   <div className="flex items-center gap-3 flex-1">
                     <div className="avatar">
                       <div className="w-10 h-10 rounded-full">
-                        <img src={request.sender.profilePic || "/avatar.png"} alt={request.sender.fullName} />
+                        <img src={request.sender?.profilePic || "/avatar.png"} alt={request.sender?.fullName || 'Unknown User'} />
                       </div>
                     </div>
                     <div>
-                      <h3 className="font-semibold">{request.sender.fullName}</h3>
+                      <h3 className="font-semibold">{request.sender?.fullName || 'Unknown User'}</h3>
                       <p className="text-sm text-base-content/60">Wants to be friends</p>
                     </div>
                   </div>
@@ -241,29 +229,29 @@ const FriendRequests = ({ isOpen, onClose }) => {
               </div>
             )
           )}
-
-          {/* Sent Requests */}
           {activeTab === 'sent' && (
-            sentRequests.length > 0 ? (
+            sentRequests.length > 0 && sentRequests.every(req => req.receiver) ? (
               sentRequests.map(request => (
-                <div key={request._id} className="flex items-center gap-4 p-3 bg-base-200 rounded-lg border">
-                  <div className="avatar">
-                    <div className="w-10 h-10 rounded-full">
-                      <img src={request.recipient.profilePic || "/avatar.png"} alt={request.recipient.fullName} />
+                request.receiver ? (
+                  <div key={request._id} className="flex items-center gap-4 p-3 bg-base-200 rounded-lg border">
+                    <div className="avatar">
+                      <div className="w-10 h-10 rounded-full">
+                        <img src={request.receiver?.profilePic || "/avatar.png"} alt={request.receiver?.fullName || 'Unknown User'} />
+                      </div>
                     </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold">{request.receiver?.fullName || 'Unknown User'}</h3>
+                      <p className="text-sm text-warning font-medium">Request pending...</p>
+                    </div>
+                    <button
+                      onClick={() => cancelFriendRequest(request._id)}
+                      disabled={isManagingRequest}
+                      className="btn btn-ghost btn-sm text-error"
+                    >
+                      <X size={16} /> Cancel
+                    </button>
                   </div>
-                  <div className="flex-1">
-                    <h3 className="font-semibold">{request.recipient.fullName}</h3>
-                    <p className="text-sm text-warning font-medium">Request pending...</p>
-                  </div>
-                  <button
-                    onClick={() => cancelFriendRequest(request._id)}
-                    disabled={isManagingRequest}
-                    className="btn btn-ghost btn-sm text-error"
-                  >
-                    <X size={16} /> Cancel
-                  </button>
-                </div>
+                ) : null
               ))
             ) : (
               <div className="text-center py-10 text-base-content/60">
